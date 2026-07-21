@@ -1,0 +1,70 @@
+{
+  "name": "cs2-demo-viewer",
+  "version": "1.0.0",
+  "description": "Standalone Windows desktop viewer for Counter-Strike 2 demo files",
+  "type": "module",
+  "main": "src/main/main.cjs",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src tests scripts",
+    "test": "node --test",
+    "build": "electron-builder --dir --win --x64",
+    "package:win": "electron-builder --win portable --x64",
+    "smoke:demo": "node scripts/smoke-demo.mjs",
+    "postinstall": "electron-builder install-app-deps",
+    "smoke:ui": "node scripts/electron-ui-smoke.mjs"
+  },
+  "dependencies": {
+    "@laihoe/demoparser2": "0.41.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.1",
+    "@types/node": "24.10.1",
+    "electron": "43.1.1",
+    "electron-builder": "26.15.3",
+    "eslint": "9.39.1",
+    "typescript": "5.9.3"
+  },
+  "build": {
+    "appId": "com.cs2demoviewer.app",
+    "productName": "CS2D Viewer",
+    "icon": "assets/cs2d-viewer-icon.ico",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/@laihoe/**/*.node"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "README.md",
+      "THIRD_PARTY_NOTICES.md"
+    ],
+    "extraResources": [
+      {
+        "from": "assets",
+        "to": "assets"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "CS2D-Viewer-${version}-portable.${ext}",
+      "forceCodeSigning": false
+    },
+    "portable": {
+      "requestExecutionLevel": "user"
+    }
+  }
+}

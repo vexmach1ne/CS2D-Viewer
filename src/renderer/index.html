@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' viewer-asset: viewer-data:; script-src 'self'; style-src 'self'; img-src 'self' viewer-asset: data:; media-src 'self' viewer-asset:; connect-src 'self' viewer-asset: viewer-data:; object-src 'none'; base-uri 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CS2 Demo Viewer</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand-block">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <p class="eyebrow">TACTICAL REPLAY</p>
+            <h1>CS2 Demo Viewer</h1>
+          </div>
+        </div>
+        <div class="demo-heading" aria-live="polite">
+          <strong id="demoTitle">No demo loaded</strong>
+          <span id="demoSubtitle">Open a Counter-Strike 2 .dem file to begin.</span>
+        </div>
+        <div class="header-actions">
+          <button id="rebuildDemoBtn" class="button button-secondary" type="button" disabled>Rebuild</button>
+          <button id="openDemoBtn" class="button button-primary" type="button">Open Demo</button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <aside class="control-rail" aria-label="Playback and display controls">
+          <section class="control-section playback-section">
+            <div class="transport-grid">
+              <button id="prevRoundBtn" class="icon-button" type="button" title="Previous round" disabled aria-label="Previous round">|&lt;</button>
+              <button id="playPauseBtn" class="play-button" type="button" disabled aria-label="Play demo">
+                <span id="playPauseGlyph" aria-hidden="true">▶</span>
+                <span id="playPauseText">Play</span>
+              </button>
+              <button id="nextRoundBtn" class="icon-button" type="button" title="Next round" disabled aria-label="Next round">&gt;|</button>
+            </div>
+            <div class="control-pair">
+              <label for="speedSelect">Speed</label>
+              <select id="speedSelect" disabled>
+                <option value="0.25">0.25×</option>
+                <option value="0.5">0.5×</option>
+                <option value="1" selected>1×</option>
+                <option value="1.5">1.5×</option>
+                <option value="2">2×</option>
+                <option value="4">4×</option>
+              </select>
+            </div>
+            <div class="control-pair control-pair-stacked">
+              <label for="followSelect">Camera</label>
+              <select id="followSelect" disabled>
+                <option value="">Free camera</option>
+              </select>
+            </div>
+          </section>
+
+          <section class="control-section toggles-section">
+            <h2>Display</h2>
+            <div class="toggle-grid">
+              <label class="toggle"><input id="showLabelsToggle" type="checkbox" checked /><span>Labels</span></label>
+              <label class="toggle"><input id="showTrailsToggle" type="checkbox" checked /><span>Trails</span></label>
+              <label class="toggle"><input id="showShotsToggle" type="checkbox" checked /><span>Tracers</span></label>
+              <label class="toggle"><input id="showNadesToggle" type="checkbox" checked /><span>Utility</span></label>
+              <label class="toggle"><input id="showTeamCardsToggle" type="checkbox" checked /><span>Team cards</span></label>
+            </div>
+          </section>
+
+          <section class="control-section audio-section">
+            <div class="section-heading-row">
+              <h2>Audio</h2>
+              <button id="audioMuteBtn" class="mute-button" type="button" aria-pressed="false" title="Mute audio">
+                <span id="audioMuteGlyph" aria-hidden="true">🔊</span>
+              </button>
+            </div>
+            <div class="volume-row">
+              <input id="audioVolumeInput" type="range" min="0" max="1" step="0.01" value="0.85" aria-label="Audio volume" />
+              <span id="audioVolumeText" class="mono">85%</span>
+            </div>
+          </section>
+
+          <details class="control-section layout-section">
+            <summary>Map alignment</summary>
+            <div class="layout-controls">
+              <label>Scale <output id="mapScaleOutput">1.00</output><input id="mapScaleInput" type="range" min="0.4" max="2.4" step="0.01" value="1" /></label>
+              <label>Pan X <output id="mapPanXOutput">0.000</output><input id="mapPanXInput" type="range" min="-0.8" max="0.8" step="0.001" value="0" /></label>
+              <label>Pan Y <output id="mapPanYOutput">0.000</output><input id="mapPanYInput" type="range" min="-0.8" max="0.8" step="0.001" value="0" /></label>
+              <label>Zoom <output id="mapZoomOutput">1.00</output><input id="mapZoomInput" type="range" min="0.5" max="3" step="0.01" value="1" /></label>
+              <button id="saveMapLayoutBtn" class="button button-secondary button-full" type="button" disabled>Save for this map</button>
+              <button id="resetMapLayoutBtn" class="text-button" type="button" disabled>Reset to calibrated default</button>
+              <p id="mapStatus" class="microcopy"></p>
+            </div>
+          </details>
+
+          <section class="control-section demo-info-section">
+            <h2>Demo</h2>
+            <dl id="demoMeta" class="demo-meta">
+              <div><dt>Map</dt><dd>—</dd></div>
+              <div><dt>Players</dt><dd>—</dd></div>
+              <div><dt>Tick rate</dt><dd>—</dd></div>
+              <div><dt>Duration</dt><dd>—</dd></div>
+            </dl>
+          </section>
+
+          <p class="shortcut-help"><kbd>Space</kbd> play · <kbd>←</kbd><kbd>→</kbd> seek · <kbd>Shift</kbd> round · <kbd>Tab</kbd> scoreboard · <kbd>Alt</kbd> active weapon</p>
+        </aside>
+
+        <section class="viewer-column" aria-label="2D demo playback">
+          <div class="timeline-panel">
+            <div class="timeline-label-row">
+              <div class="round-chip" id="roundLabel">Round —</div>
+              <label class="tick-entry">Tick <input id="tickInput" type="number" min="0" max="1" value="0" disabled /></label>
+              <span id="timeLabel" class="mono timeline-time">00:00 / 00:00</span>
+            </div>
+            <input id="timelineInput" class="timeline" type="range" min="0" max="1" step="1" value="0" disabled aria-label="Demo timeline" />
+            <div id="roundMarkers" class="round-markers" aria-hidden="true"></div>
+          </div>
+
+          <div id="canvasWrap" class="canvas-wrap">
+            <canvas id="viewerCanvas" width="1400" height="860" tabindex="0" aria-label="Top-down CS2 demo map"></canvas>
+
+            <div class="match-hud" aria-live="off">
+              <div id="clockLabel" class="clock-label"></div>
+              <div id="matchScoreLabel" class="match-score"></div>
+            </div>
+
+            <div id="nukeLayerToggle" class="nuke-toggle hidden" role="group" aria-label="Nuke floor">
+              <button id="nukeLayerABtn" class="nuke-layer-button is-active" type="button">A site</button>
+              <button id="nukeLayerBBtn" class="nuke-layer-button" type="button">B site</button>
+            </div>
+
+            <div id="teamCards" class="team-cards hidden"></div>
+            <div id="killFeed" class="kill-feed"></div>
+            <div id="scoreboard" class="scoreboard hidden" role="dialog" aria-label="Scoreboard"></div>
+
+            <div id="emptyState" class="empty-state">
+              <div class="empty-radar" aria-hidden="true"><i></i><i></i><i></i></div>
+              <h2>Open a CS2 demo</h2>
+              <p>The demo is parsed locally. No match history or account setup is required.</p>
+              <button id="emptyOpenBtn" class="button button-primary" type="button">Choose .dem file</button>
+            </div>
+
+            <div id="loadingOverlay" class="loading-overlay hidden" aria-live="polite">
+              <div class="loading-card">
+                <div class="loading-heading"><strong id="loadingStage">Preparing demo</strong><span id="loadingPercent" class="mono">0%</span></div>
+                <div class="progress-track"><progress id="loadingProgress" class="progress-fill" max="100" value="0"></progress></div>
+                <p id="loadingMessage">Starting parser…</p>
+                <button id="cancelParseBtn" class="button button-secondary" type="button">Cancel</button>
+              </div>
+            </div>
+
+            <div id="statsOverlay" class="stats-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="statsTitle">
+              <section class="stats-panel">
+                <header class="stats-header">
+                  <div>
+                    <p class="eyebrow">ACTIVE DEMO STATISTICS</p>
+                    <h2 id="statsTitle">Match statistics</h2>
+                  </div>
+                  <div class="stats-header-actions">
+                    <div id="statsScopeTabs" class="segmented" role="tablist" aria-label="Statistics scope">
+                      <button class="is-active" data-stats-scope="current" type="button">Current</button>
+                      <button data-stats-scope="full" type="button">Full match</button>
+                    </div>
+                    <button id="closeStatsBtn" class="close-button" type="button" aria-label="Close statistics">×</button>
+                  </div>
+                </header>
+                <div id="statsCategoryTabs" class="stats-tabs" role="tablist" aria-label="Statistics category">
+                  <button class="is-active" data-stats-category="general" type="button">General</button>
+                  <button data-stats-category="performance" type="button">Performance</button>
+                  <button data-stats-category="utility" type="button">Utility</button>
+                </div>
+                <p id="statsMeta" class="stats-meta mono"></p>
+                <div id="statsContent" class="stats-content"></div>
+              </section>
+            </div>
+          </div>
+
+          <div class="status-strip" aria-live="polite">
+            <span id="statusDot" class="status-dot"></span>
+            <p id="statusText">Ready. Open a .dem file to begin.</p>
+            <button id="warningsBtn" class="warnings-button hidden" type="button"></button>
+          </div>
+          <div id="warningsPanel" class="warnings-panel hidden"></div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

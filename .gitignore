@@ -1,0 +1,14 @@
+node_modules/
+release/
+dist/
+coverage/
+.cache/
+*.log
+*.dem
+*.pdemo
+*.pview
+*.viewer.json
+*.viewer.json.tmp
+.DS_Store
+Thumbs.db
+

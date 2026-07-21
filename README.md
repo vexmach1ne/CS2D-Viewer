@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/vexmach1ne/CS2D-Viewer/releases/latest"><strong>Download for Windows</strong></a> ·
-  <a href="https://github.com/vexmach1ne/CS2D-Viewer/releases">All releases</a>
+  <a href="https://github.com/vexmach1ne/CS2D-Viewer/releases">All releases</a> Â·`r`n  <a href="https://ko-fi.com/vex_games">Support development</a>
 </p>
 
 ## What it does

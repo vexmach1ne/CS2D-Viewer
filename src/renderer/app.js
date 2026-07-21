@@ -244,6 +244,47 @@ function assetUrl(category, relativePath) {
   return `viewer-asset://${category}/${clean.split('/').map(encodeURIComponent).join('/')}`;
 }
 
+/** User-supplied silhouettes, normalized to a transparent, left-facing asset set. */
+const WEAPON_ICON_FILES = Object.freeze({
+  'ak-47': 'ak-47.png', aug: 'aug.png', awp: 'awp.png', c4: 'c4.png', 'cz75-auto': 'cz75-auto.png',
+  'desert-eagle': 'desert-eagle.png', 'dual-berettas': 'dual-berettas.png', famas: 'famas.png', 'five-seven': 'five-seven.png',
+  galil: 'galil.png', 'g3sg1': 'g3sg1.png', 'glock-18': 'glock-18.png', knife: 'knife.png', 'm4a1-s': 'm4a1-s.png',
+  m4a4: 'm4a4.png', 'mac-10': 'mac-10.png', 'mag-7': 'mag-7.png', 'mp5-sd': 'mp5-sd.png', 'mp5-sd-alt': 'mp5-sd-alt.png',
+  mp7: 'mp7.png', mp9: 'mp9.png', nova: 'nova.png', p2000: 'p2000.png', p250: 'p250.png', p90: 'p90.png',
+  'pp-bizon': 'pp-bizon.png', 'r8-revolver': 'r8-revolver.png', scar20: 'scar20.png', 'sg-553': 'sg-553.png',
+  'ssg-08': 'ssg-08.png', 'ump-45': 'ump-45.png', 'usp-s': 'usp-s.png',
+});
+const WEAPON_ICON_ALIASES = Object.freeze({
+  ak47: 'ak-47', awp: 'awp', aug: 'aug', bomb: 'c4', c4: 'c4', cz: 'cz75-auto', cz75: 'cz75-auto',
+  deagle: 'desert-eagle', deserteagle: 'desert-eagle', elite: 'dual-berettas', fiveseven: 'five-seven',
+  galilar: 'galil', g3sg1: 'g3sg1', glock: 'glock-18', glock18: 'glock-18', knife: 'knife', krieg: 'sg-553',
+  m4a1: 'm4a1-s', m4a1s: 'm4a1-s', m4a4: 'm4a4', mac10: 'mac-10', mag7: 'mag-7', mp5: 'mp5-sd',
+  mp5sd: 'mp5-sd', mp7: 'mp7', mp9: 'mp9', nova: 'nova', p2000: 'p2000', p250: 'p250', p90: 'p90',
+  bizon: 'pp-bizon', ppbizon: 'pp-bizon', revolver: 'r8-revolver', r8: 'r8-revolver', scar20: 'scar20',
+  scar: 'scar20', scout: 'ssg-08', sg553: 'sg-553', ssg08: 'ssg-08', ump: 'ump-45', ump45: 'ump-45',
+  usp: 'usp-s', usps: 'usp-s', uspsilencer: 'usp-s',
+});
+const weaponImageCache = new Map();
+const weaponTintCanvas = document.createElement('canvas');
+const weaponTintContext = weaponTintCanvas.getContext('2d');
+
+function weaponIconFile(name) {
+  const normalized = String(name || '').toLowerCase().replace(/^weapon_/, '').replace(/[^a-z0-9]+/g, '').trim();
+  const key = WEAPON_ICON_ALIASES[normalized] || normalized;
+  return WEAPON_ICON_FILES[key] || '';
+}
+
+function weaponImage(name) {
+  const file = weaponIconFile(name);
+  if (!file) return null;
+  let image = weaponImageCache.get(file);
+  if (!image) {
+    image = new Image();
+    image.src = assetUrl('icons', `weapons/${file}`);
+    weaponImageCache.set(file, image);
+  }
+  return image.complete && image.naturalWidth > 0 ? image : null;
+}
 function formatDuration(seconds) {
   const total = Math.max(0, Math.floor(finite(seconds)));
   const hours = Math.floor(total / 3600);
@@ -350,6 +391,21 @@ function weaponSvg(name) {
   return `<svg class="original-weapon-svg" viewBox="0 0 32 32" role="img" aria-label="${label}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
 }
 function drawWeaponGlyph(context, name, x, y, width = 26, height = 16) {
+  const raster = weaponImage(name);
+  if (raster && weaponTintContext) {
+    const pixelWidth = Math.max(1, Math.ceil(width)); const pixelHeight = Math.max(1, Math.ceil(height));
+    if (weaponTintCanvas.width !== pixelWidth || weaponTintCanvas.height !== pixelHeight) {
+      weaponTintCanvas.width = pixelWidth; weaponTintCanvas.height = pixelHeight;
+    }
+    weaponTintContext.clearRect(0, 0, pixelWidth, pixelHeight);
+    weaponTintContext.drawImage(raster, 0, 0, pixelWidth, pixelHeight);
+    weaponTintContext.globalCompositeOperation = 'source-in';
+    weaponTintContext.fillStyle = '#e7edf4';
+    weaponTintContext.fillRect(0, 0, pixelWidth, pixelHeight);
+    weaponTintContext.globalCompositeOperation = 'source-over';
+    context.drawImage(weaponTintCanvas, x, y, width, height);
+    return;
+  }
   const kind = weaponKind(name); const sx = width / 32; const sy = height / 32;
   context.save(); context.translate(x, y); context.scale(sx, sy); context.strokeStyle = '#e7edf4'; context.fillStyle = '#e7edf4'; context.lineWidth = 2; context.lineCap = 'round'; context.lineJoin = 'round';
   if (kind === 'bomb') { context.strokeRect(6, 7, 20, 14); context.beginPath(); context.moveTo(11, 7); context.lineTo(11, 4); context.lineTo(21, 4); context.lineTo(21, 7); context.moveTo(14, 12); context.lineTo(18, 12); context.moveTo(12, 17); context.lineTo(20, 17); context.stroke(); }
@@ -607,11 +663,19 @@ function populateFollowSelect() {
 }
 function renderRoundMarkers() {
   if (!dom.roundMarkers || !state.bundle) return;
-  const markerLines = state.bundle.rounds.map((round, index) => {
-    const x = clamp(finite(round.startTick) / totalTicks() * 1000, 0, 1000);
-    return `<line x1="${x}" x2="${x}" y1="0" y2="8"><title>Round ${escapeHtml(round.round || index + 1)}</title></line>`;
+  const maxTick = Math.max(1, totalTicks()); const tracks = state.bundle.tracks || {};
+  const point = (tick) => clamp(finite(tick) / maxTick * 1000, 0, 1000);
+  const rounds = array(state.bundle.rounds).map((round, index) => {
+    const x = point(round.startTick); return `<line class="timeline-round-marker" x1="${x}" x2="${x}" y1="2" y2="18"><title>Round ${escapeHtml(round.round || index + 1)}</title></line>`;
   }).join('');
-  dom.roundMarkers.innerHTML = `<svg class="round-marker-svg" viewBox="0 0 1000 8" preserveAspectRatio="none" aria-hidden="true">${markerLines}</svg>`;
+  const events = [
+    ...array(tracks.kills).map((row) => ({ tick: row.tick, kind: 'kill' })),
+    ...array(tracks.bombs).filter((row) => ['planted', 'defused', 'exploded'].includes(String(row.type))).map((row) => ({ tick: row.tick, kind: `bomb ${escapeHtml(String(row.type))}` })),
+    ...array(tracks.nades).filter((row) => ['flash', 'he', 'smoke', 'inferno'].includes(String(row.type))).map((row) => ({ tick: row.tick, kind: `utility ${escapeHtml(String(row.type))}` })),
+  ].filter((row) => finite(row.tick) >= 0 && finite(row.tick) <= maxTick).sort((a, b) => finite(a.tick) - finite(b.tick)).map((row) => {
+    const x = point(row.tick); return `<circle class="timeline-event ${row.kind}" cx="${x}" cy="10" r="3"><title>${row.kind}</title></circle>`;
+  }).join('');
+  dom.roundMarkers.innerHTML = `<svg class="round-marker-svg" viewBox="0 0 1000 20" preserveAspectRatio="none" aria-hidden="true"><line class="timeline-base-line" x1="0" x2="1000" y1="10" y2="10"/>${rounds}${events}</svg>`;
 }
 async function loadMapArt() {
   state.mapImage = null; state.nukeImages = { A: null, B: null };
@@ -677,9 +741,10 @@ function endTimelineScrub() {
 }
 function updatePlaybackUi() {
   if (!state.bundle) return;
-  if (dom.timelineInput instanceof HTMLInputElement) { dom.timelineInput.max = String(totalTicks()); dom.timelineInput.value = String(state.tick); }
-  if (dom.tickInput instanceof HTMLInputElement) { dom.tickInput.max = String(totalTicks()); dom.tickInput.value = String(state.tick); }
-  if (dom.timeLabel) dom.timeLabel.textContent = `${formatDuration(state.tick / tickRate())} / ${formatDuration(totalTicks() / tickRate())}`;
+  const maxTick = totalTicks(); const progress = maxTick ? clamp(state.tick / maxTick * 100, 0, 100) : 0;
+  if (dom.timelineInput instanceof HTMLInputElement) { dom.timelineInput.max = String(maxTick); dom.timelineInput.value = String(state.tick); dom.timelineInput.style.setProperty('--timeline-progress', `${progress}%`); }
+  if (dom.tickInput instanceof HTMLInputElement) { dom.tickInput.max = String(maxTick); dom.tickInput.value = String(state.tick); }
+  if (dom.timeLabel) dom.timeLabel.textContent = `${formatDuration(state.tick / tickRate())} / ${formatDuration(maxTick / tickRate())}`;
   const index = roundIndexAtTick();
   if (dom.roundLabel) dom.roundLabel.textContent = index >= 0 ? `Round ${state.bundle.rounds[index]?.round || index + 1}` : 'Pre-match';
 }
@@ -720,15 +785,25 @@ function renderHud() {
     const live = finite(round.freezeEndTick, finite(round.startTick));
     seconds = state.tick < live ? (live - state.tick) / tickRate() : Math.max(0, CLOCK_DEFAULTS.roundTimeSec - (state.tick - live) / tickRate());
   }
-  if (dom.clockLabel) dom.clockLabel.textContent = `${bomb ? 'BOMB ' : ''}${formatDuration(seconds)}`;
-  if (dom.matchScoreLabel) dom.matchScoreLabel.textContent = array(stats?.teams).map((team) => `${team.name} ${team.score}`).join('  ·  ');
+  const roundNumber = round?.round || (roundIndexAtTick() >= 0 ? roundIndexAtTick() + 1 : '—');
+  const phase = bomb ? 'bomb' : state.tick < finite(round?.freezeEndTick, 0) ? 'freeze' : 'live';
+  if (dom.clockLabel) {
+    dom.clockLabel.setAttribute('data-phase', phase);
+    dom.clockLabel.innerHTML = `<span class="clock-phase">${phase === 'bomb' ? 'BOMB ACTIVE' : phase === 'freeze' ? 'FREEZE TIME' : 'ROUND LIVE'}</span><strong>${formatDuration(seconds)}</strong><span class="clock-round">ROUND ${escapeHtml(roundNumber)}</span>`;
+  }
+  if (dom.matchScoreLabel) {
+    const teams = array(stats?.teams).slice(0, 2);
+    dom.matchScoreLabel.innerHTML = teams.map((team) => `<span class="match-score-team ${normalizeSide(team.side).toLowerCase()}">${escapeHtml(team.name)}</span><strong class="match-score-value ${normalizeSide(team.side).toLowerCase()}">${finite(team.score)}</strong>`).join('<span class="match-score-separator">—</span>');
+  }
   renderTeamCards(stats); renderKillFeed();
   if (state.scoreboardOpen) renderScoreboard(stats);
 }
 
 function weaponIcon(name, primary = false) {
-  const normalized = String(name || '').toLowerCase();
+  const normalized = String(name || '').trim();
   if (!normalized) return '';
+  const file = weaponIconFile(normalized);
+  if (file) return `<span class="weapon-icon weapon-icon-raster${primary ? ' primary' : ''}" role="img" aria-label="${escapeHtml(normalized)}"><img src="${assetUrl('icons', `weapons/${file}`)}" alt="" draggable="false"></span>`;
   return `<span class="weapon-icon${primary ? ' primary' : ''}">${weaponSvg(normalized)}</span>`;
 }
 function renderTeamCards(stats) {
@@ -747,11 +822,11 @@ function renderTeamCards(stats) {
 function renderKillFeed() {
   if (!dom.killFeed || !state.bundle) return;
   const rows = array(state.bundle.tracks.kills).filter((row) => state.tick - finite(row.tick) >= 0 && state.tick - finite(row.tick) < tickRate() * 6).slice(-6);
-  dom.killFeed.innerHTML = rows.map((row) => `<div class="kill-feed-entry"><span class="kill-feed-name" data-side="${normalizeSide(row.killerTeam)}">${escapeHtml(row.killerName || playerName(row.killerSteamId))}</span><span class="kill-feed-weapon">${escapeHtml(row.weapon || 'kill')}</span>${row.headshot ? '<span class="kill-feed-extra">HS</span>' : ''}<span class="kill-feed-name" data-side="${normalizeSide(row.victimTeam)}">${escapeHtml(row.victimName || playerName(row.victimSteamId))}</span></div>`).join('');
+  dom.killFeed.innerHTML = rows.map((row) => `<div class="kill-feed-entry"><span class="kill-feed-name" data-side="${normalizeSide(row.killerTeam)}">${escapeHtml(row.killerName || playerName(row.killerSteamId))}</span><span class="kill-feed-weapon" data-side="${normalizeSide(row.killerTeam)}">${weaponIcon(row.weapon || 'kill')}</span>${row.headshot ? '<span class="kill-feed-extra">HS</span>' : ''}<span class="kill-feed-name" data-side="${normalizeSide(row.victimTeam)}">${escapeHtml(row.victimName || playerName(row.victimSteamId))}</span></div>`).join('');
 }
 function renderScoreboard(stats = statsAt(state.tick, true)) {
   if (!dom.scoreboard || !stats) return;
-  dom.scoreboard.innerHTML = `<table><thead><tr><th>Player</th><th>K</th><th>D</th><th>A</th><th>ADR</th><th>HS%</th><th>HP</th><th>Money</th><th>Gear</th></tr></thead><tbody>${array(stats.teams).map((team) => `<tr class="scoreboard-team-row" data-side="${team.side}"><th colspan="9">${escapeHtml(team.name)} · ${finite(team.score)}</th></tr>${array(team.players).map((row) => { const live = state.playerState[row.steamId] || {}; return `<tr class="scoreboard-player-row${live.isAlive === false ? ' is-dead' : ''}"><td class="scoreboard-player-name">${escapeHtml(row.name)}</td><td>${finite(row.kills)}</td><td>${finite(row.deaths)}</td><td>${finite(row.assists)}</td><td>${finite(row.adr).toFixed(1)}</td><td>${finite(row.headshotPercent ?? row.hsPercent).toFixed(0)}</td><td class="scoreboard-health">${live.health ?? 0}</td><td>$${finite(live.money).toLocaleString()}</td><td><span class="scoreboard-gear">${weaponIcon(live.weapon, true)}</span></td></tr>`; }).join('')}`).join('')}</tbody></table>`;
+  dom.scoreboard.innerHTML = `<table><thead><tr><th>Player</th><th>K</th><th>D</th><th>A</th><th>ADR</th><th>HS%</th><th>HP</th><th>Money</th><th>Gear</th></tr></thead><tbody>${array(stats.teams).map((team) => `<tr class="scoreboard-team-row" data-side="${team.side}"><th colspan="9">${escapeHtml(team.name)} · ${finite(team.score)}</th></tr>${array(team.players).map((row) => { const live = state.playerState[row.steamId] || {}; return `<tr class="scoreboard-player-row${live.isAlive === false ? ' is-dead' : ''}" data-side="${team.side}"><td class="scoreboard-player-name">${escapeHtml(row.name)}</td><td>${finite(row.kills)}</td><td>${finite(row.deaths)}</td><td>${finite(row.assists)}</td><td>${finite(row.adr).toFixed(1)}</td><td>${finite(row.headshotPercent ?? row.hsPercent).toFixed(0)}</td><td class="scoreboard-health">${live.health ?? 0}</td><td>$${finite(live.money).toLocaleString()}</td><td><span class="scoreboard-gear">${weaponIcon(live.weapon, true)}</span></td></tr>`; }).join('')}`).join('')}</tbody></table>`;
 }
 function setScoreboard(open) {
   state.scoreboardOpen = Boolean(open && state.bundle && !state.statsOpen);
@@ -886,11 +961,21 @@ function drawActiveBomb(m) {
   m.ctx.beginPath(); m.ctx.arc(point.x, point.y, 10, 0, Math.PI * 2); m.ctx.fillStyle = 'rgba(8, 16, 26, .88)'; m.ctx.fill(); m.ctx.strokeStyle = '#ef7777'; m.ctx.lineWidth = 1.5; m.ctx.stroke();
   drawWeaponGlyph(m.ctx, 'c4', point.x - 12, point.y - 8, 24, 16);
   m.ctx.restore();
-}function drawPlayers(m) {
+}
+function drawDeadMarker(m, point) {
+  const context = m.ctx;
+  context.save(); context.translate(point.x, point.y); context.lineWidth = 1;
+  context.beginPath(); context.arc(0, -1, 5, 0, Math.PI * 2); context.fillStyle = '#edf4fa'; context.fill(); context.strokeStyle = '#07101a'; context.stroke();
+  context.fillRect(-3, 2, 6, 4);
+  context.fillStyle = '#07101a'; context.beginPath(); context.arc(-2, -1, 1.15, 0, Math.PI * 2); context.arc(2, -1, 1.15, 0, Math.PI * 2); context.fill();
+  context.fillRect(-2, 3, 1, 2); context.fillRect(1, 3, 1, 2); context.restore();
+}
+function drawPlayers(m) {
   for (const row of Object.values(state.playerState)) {
     const p = m.world(row.x, row.y); const color = row.side === 'T' ? '#e8a558' : row.side === 'CT' ? '#74aee9' : '#9ba8b7';
     m.ctx.save(); m.ctx.globalAlpha = row.isAlive ? 1 : .3; m.ctx.translate(p.x, p.y); m.ctx.rotate(-finite(row.yaw) * Math.PI / 180);
     m.ctx.beginPath(); m.ctx.moveTo(10, 0); m.ctx.lineTo(-7, -6); m.ctx.lineTo(-4, 0); m.ctx.lineTo(-7, 6); m.ctx.closePath(); m.ctx.fillStyle = color; m.ctx.fill(); m.ctx.strokeStyle = '#08101a'; m.ctx.lineWidth = 2; m.ctx.stroke(); m.ctx.restore();
+    if (row.isAlive === false) drawDeadMarker(m, p);
     if (state.damageFlashEnds[row.steamId] > state.tick) { m.ctx.beginPath(); m.ctx.arc(p.x, p.y, 13, 0, Math.PI * 2); m.ctx.strokeStyle = '#ef7777'; m.ctx.lineWidth = 2; m.ctx.stroke(); }
     if (state.showLabels) {
       const health = clamp(finite(row.health), 0, 100);
@@ -898,7 +983,7 @@ function drawActiveBomb(m) {
       m.ctx.fillStyle = health > 50 ? '#75d69a' : health > 25 ? '#e8b260' : '#ef7777'; m.ctx.fillRect(p.x - 12, p.y - 27, 24 * health / 100, 2);
       m.ctx.font = '10px ui-monospace, monospace'; m.ctx.textAlign = 'center'; m.ctx.fillStyle = '#eef4fa'; m.ctx.fillText(row.name, p.x, p.y - 14);
     }
-    if (state.showWeapons) { m.ctx.save(); m.ctx.globalAlpha = row.isAlive ? 1 : .3; drawWeaponGlyph(m.ctx, row.weapon, p.x - 13, p.y + 14, 26, 16); m.ctx.restore(); }
+    if (state.showWeapons && row.isAlive !== false && String(row.weapon || '').trim()) { m.ctx.save(); drawWeaponGlyph(m.ctx, row.weapon, p.x - 13, p.y + 14, 26, 16); m.ctx.restore(); }
   }
 }
 function drawBlind(m) {

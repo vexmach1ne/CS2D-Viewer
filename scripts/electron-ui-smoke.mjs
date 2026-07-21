@@ -187,7 +187,7 @@ async function waitFor(predicate, timeoutMs = 15000) {
 }
 
 async function main() {
-  const executable = path.resolve(argument('--app') || path.join(projectRoot, 'release', 'win-unpacked', 'CS2 Demo Viewer.exe'));
+  const executable = path.resolve(argument('--app') || path.join(projectRoot, 'release', 'win-unpacked', 'CS2D Viewer.exe'));
   assert.equal(fs.statSync(executable).isFile(), true, 'Electron executable must exist');
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cs2-electron-ui-smoke-'));
   const isolatedLocalAppData = path.join(temporaryRoot, 'local');
@@ -252,12 +252,31 @@ async function main() {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', bubbles: true }));
       const open = !document.querySelector('#scoreboard')?.classList.contains('hidden');
       const rows = document.querySelectorAll('#scoreboard .scoreboard-player-row').length;
+      const weapon = document.querySelector('#scoreboard .weapon-icon-raster img');
+      const rasterWeapons = document.querySelectorAll('#scoreboard .weapon-icon-raster').length;
+      const weaponSource = weapon?.getAttribute('src') || '';
+      const weaponFilter = weapon ? getComputedStyle(weapon).filter : '';
       window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Tab', code: 'Tab', bubbles: true }));
-      return { open, rows };
+      return { open, rows, rasterWeapons, weaponSource, weaponFilter };
     })()`);
     assert.equal(scoreboard.open, true);
     assert.equal(scoreboard.rows, 4);
+    assert.ok(scoreboard.rasterWeapons >= 1);
+    assert.match(scoreboard.weaponSource, /viewer-asset:.*weapons/i);
+    assert.notEqual(scoreboard.weaponFilter, 'none');
 
+    const canvasSize = await cdp.evaluate(`(() => {
+      const canvas = document.querySelector('#viewerCanvas');
+      return canvas ? { width: canvas.width, height: canvas.height } : null;
+    })()`);
+    await cdp.evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Alt', code: 'AltLeft', bubbles: true }))`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const altCanvasSize = await cdp.evaluate(`(() => {
+      const canvas = document.querySelector('#viewerCanvas');
+      return canvas ? { width: canvas.width, height: canvas.height } : null;
+    })()`);
+    await cdp.evaluate(`window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Alt', code: 'AltLeft', bubbles: true }))`);
+    assert.deepEqual(altCanvasSize, canvasSize);
     await new Promise((resolve) => setTimeout(resolve, 300));
     assert.deepEqual(cdp.runtimeErrors, []);
     console.log(JSON.stringify({ sourceMode, restored, stats, scoreboard, runtimeErrors: cdp.runtimeErrors }, null, 2));

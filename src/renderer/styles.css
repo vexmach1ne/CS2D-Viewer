@@ -952,7 +952,8 @@ kbd {
   width: 32px;
 }
 
-.weapon-icon img {
+.weapon-icon img,
+.weapon-icon .original-weapon-svg {
   display: block;
   max-width: 100%;
   max-height: 13px;

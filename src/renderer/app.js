@@ -144,57 +144,6 @@ const PRIMARY_WEAPONS = new Set([
   'xm1014',
 ]);
 
-const WEAPON_ICON_FILES = Object.freeze({
-  'ak-47': 'ak-47',
-  aug: 'aug',
-  armor: 'armor',
-  'armor+helmet': 'armor+helmet',
-  awp: 'awp',
-  'pp-bizon': 'bizon',
-  c4: 'c4',
-  'c4 explosive': 'c4',
-  c4explosive: 'c4',
-  bomb: 'c4',
-  'cz75-auto': 'cz',
-  decoy: 'decoy',
-  'desert eagle': 'deagle',
-  'dual berettas': 'dual_elites',
-  famas: 'famas',
-  'five-seven': 'fiveseven',
-  flash: 'flashbang',
-  g3sg1: 'g3sg1',
-  'galil ar': 'galil',
-  galil: 'galil',
-  'glock-18': 'glock',
-  he: 'he',
-  incendiary: 'incendiary',
-  knife: 'knife',
-  m249: 'm249',
-  'm4a1-s': 'm4a1-s',
-  m4a4: 'm4a4',
-  'mac-10': 'mac10',
-  'mag-7': 'mag-7',
-  molotov: 'molotov',
-  mp7: 'mp7',
-  mp9: 'mp9',
-  negev: 'negev',
-  nova: 'nova',
-  p2000: 'p2000',
-  p250: 'p250',
-  p90: 'p90',
-  'r8 revolver': 'r8',
-  'sawed-off': 'sawed-off',
-  'scar-20': 'scar20',
-  'sg 553': 'krieg552',
-  smoke: 'smoke',
-  'ssg 08': 'scout',
-  'tec-9': 'tec-9',
-  'ump-45': 'ump',
-  'usp-s': 'usp-s',
-  xm1014: 'xm1014',
-  'defuse kit': 'defuse_kit',
-});
-
 const DEFAULT_AUDIO_CONFIG = Object.freeze({
   master: 1,
   groups: Object.freeze({
@@ -228,8 +177,6 @@ const state = {
   mapImage: /** @type {HTMLImageElement|null} */ (null),
   nukeImages: /** @type {{A:HTMLImageElement|null,B:HTMLImageElement|null}} */ ({ A: null, B: null }),
   nukeLayer: /** @type {'A'|'B'} */ ('A'),
-  vfx: /** @type {Record<string,HTMLImageElement|null>} */ ({ smoke: null, fire: null, flame: null, blind: null }),
-  canvasWeaponImages: /** @type {Map<string, HTMLImageElement>} */ (new Map()),
   showLabels: true,
   showWeapons: false,
   showTrails: true,
@@ -254,14 +201,14 @@ const state = {
   audioSuppressedUntilMs: 0,
   timelineScrubbing: false,
   audioGeneration: 0,
-  activeAudioSources: /** @type {Set<AudioBufferSourceNode>} */ (new Set()),
+  activeAudioSources: /** @type {Set<AudioScheduledSourceNode>} */ (new Set()),
   audioRoundRobin: /** @type {Record<string,number>} */ ({}),
   audioVolume: 0.85,
   audioMuted: false,
   audioLastDamageMs: 0,
   audioLastDoorMs: 0,
   bombAudio: /** @type {null|{endTick:number,roundEndTick:number,nextBeepTick:number,x:number,y:number,site:'A'|'B'}} */ (null),
-  activeMolotovSources: /** @type {AudioBufferSourceNode[]} */ ([]),
+  activeMolotovSources: /** @type {AudioScheduledSourceNode[]} */ ([]),
   frameId: 0,
   lastFrameMs: 0,
   sessionSaveTimer: 0,
@@ -383,11 +330,33 @@ function loadImage(url) {
   });
 }
 
-function canvasWeaponImage(name) {
-  const file = WEAPON_ICON_FILES[String(name || '').toLowerCase()]; if (!file) return null;
-  let image = state.canvasWeaponImages.get(file);
-  if (!image) { image = new Image(); image.addEventListener('load', renderCanvas, { once: true }); image.src = assetUrl('icons', 'weapons/' + file + '.png'); state.canvasWeaponImages.set(file, image); }
-  return image.complete && image.naturalWidth > 0 ? image : null;
+function weaponKind(name) {
+  const value = String(name || '').toLowerCase();
+  if (/c4|bomb/.test(value)) return 'bomb';
+  if (/knife/.test(value)) return 'knife';
+  if (/flash|smoke|molotov|incendiary|decoy|^he$/.test(value)) return 'utility';
+  if (/awp|g3sg1|scar|ssg/.test(value)) return 'long';
+  if (/glock|usp|p2000|p250|deagle|five|tec|cz|revolver|elite/.test(value)) return 'sidearm';
+  return 'rifle';
+}
+function weaponSvg(name) {
+  const kind = weaponKind(name); const label = escapeHtml(String(name || 'weapon'));
+  const paths = kind === 'bomb' ? '<rect x="6" y="7" width="20" height="14" rx="2"/><path d="M11 7V4h10v3m-7 4h4m-6 5h8"/>' :
+    kind === 'knife' ? '<path d="M7 22L24 5l2 2-17 17H7v-2zM17 14l4 4"/>' :
+    kind === 'utility' ? '<circle cx="16" cy="16" r="8"/><path d="M16 8V4m-3 0h6"/>' :
+    kind === 'sidearm' ? '<path d="M6 12h18v5h-4l-2 7h-4l1-7H9l-1 4H5z"/>' :
+    kind === 'long' ? '<path d="M3 15h26M9 12h12v3H9zM22 13h5v2M10 15l-2 8m8-8l3 8"/>' :
+    '<path d="M4 13h22v4h-7l-2 7h-4l1-7H9l-2 4H4zM12 10h8v3h-8z"/>';
+  return `<svg class="original-weapon-svg" viewBox="0 0 32 32" role="img" aria-label="${label}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+}
+function drawWeaponGlyph(context, name, x, y, width = 26, height = 16) {
+  const kind = weaponKind(name); const sx = width / 32; const sy = height / 32;
+  context.save(); context.translate(x, y); context.scale(sx, sy); context.strokeStyle = '#e7edf4'; context.fillStyle = '#e7edf4'; context.lineWidth = 2; context.lineCap = 'round'; context.lineJoin = 'round';
+  if (kind === 'bomb') { context.strokeRect(6, 7, 20, 14); context.beginPath(); context.moveTo(11, 7); context.lineTo(11, 4); context.lineTo(21, 4); context.lineTo(21, 7); context.moveTo(14, 12); context.lineTo(18, 12); context.moveTo(12, 17); context.lineTo(20, 17); context.stroke(); }
+  else if (kind === 'knife') { context.beginPath(); context.moveTo(7, 22); context.lineTo(24, 5); context.lineTo(26, 7); context.lineTo(9, 24); context.lineTo(7, 24); context.closePath(); context.stroke(); }
+  else if (kind === 'utility') { context.beginPath(); context.arc(16, 16, 8, 0, Math.PI * 2); context.moveTo(16, 8); context.lineTo(16, 4); context.moveTo(13, 4); context.lineTo(19, 4); context.stroke(); }
+  else { context.beginPath(); context.moveTo(4, 13); context.lineTo(26, 13); context.lineTo(26, 17); context.lineTo(19, 17); context.lineTo(17, 24); context.lineTo(13, 24); context.lineTo(14, 17); context.lineTo(9, 17); context.lineTo(7, 21); context.lineTo(4, 21); context.closePath(); context.stroke(); if (kind === 'long') { context.moveTo(3, 15); context.lineTo(29, 15); } context.stroke(); }
+  context.restore();
 }
 
 /** @param {any} value @param {MapLayout} [fallback] @returns {MapLayout} */
@@ -557,7 +526,7 @@ async function acceptDescriptor(rawDescriptor, origin) {
   state.cameraPanX = 0;
   state.cameraPanY = 0;
   syncMapControls();
-  await Promise.allSettled([loadMapArt(), loadVfx(), loadAudioCatalog()]);
+  await Promise.allSettled([loadMapArt(), loadAudioCatalog()]);
   rebuildBlindIndex();
   populateFollowSelect();
   renderRoundMarkers();
@@ -658,11 +627,7 @@ async function loadMapArt() {
     if (dom.mapStatus) dom.mapStatus.textContent = 'Calibrated map art loaded.';
   } catch (_error) { if (dom.mapStatus) dom.mapStatus.textContent = 'Map art failed; using coordinate grid.'; }
 }
-async function loadVfx() {
-  for (const [key, file] of [['smoke', 'smoke_overlay.png'], ['fire', 'fire_overlay.png'], ['flame', 'flame_anim.gif']]) {
-    try { state.vfx[key] = /** @type {HTMLImageElement} */ (await loadImage(assetUrl('vfx', file))); } catch (_error) { state.vfx[key] = null; }
-  }
-}
+
 async function loadAudioCatalog() {
   if (!bridge?.getAudioCatalog || state.audioCatalog) return;
   try { state.audioCatalog = await bridge.getAudioCatalog(); state.audioConfig = { ...DEFAULT_AUDIO_CONFIG, ...(state.audioCatalog?.config || {}) }; }
@@ -762,9 +727,9 @@ function renderHud() {
 }
 
 function weaponIcon(name, primary = false) {
-  const normalized = String(name || '').toLowerCase(); const file = WEAPON_ICON_FILES[normalized];
-  if (!file) return '';
-  return `<span class="weapon-icon${primary ? ' primary' : ''}"><img src="${assetUrl('icons', `weapons/${file}.png`)}" alt="${escapeHtml(normalized)}"></span>`;
+  const normalized = String(name || '').toLowerCase();
+  if (!normalized) return '';
+  return `<span class="weapon-icon${primary ? ' primary' : ''}">${weaponSvg(normalized)}</span>`;
 }
 function renderTeamCards(stats) {
   if (!dom.teamCards) return;
@@ -900,10 +865,12 @@ function drawUtility(m) {
   if (!state.showNades) return;
   for (const row of array(state.bundle?.tracks?.nades)) {
     if (state.tick < finite(row.tick) || state.tick > finite(row.endTick, row.tick + 16)) continue;
-    const p = m.world(finite(row.x), finite(row.y)); const radius = Math.max(8, m.radius(finite(row.radius, 100)));
-    const type = String(row.type); const image = type === 'smoke' ? state.vfx.smoke : type === 'inferno' ? state.vfx.fire : null;
-    if (image) { m.ctx.save(); m.ctx.globalAlpha = .72; m.ctx.drawImage(image, p.x - radius, p.y - radius, radius * 2, radius * 2); m.ctx.restore(); }
-    else { m.ctx.beginPath(); m.ctx.arc(p.x, p.y, radius, 0, Math.PI * 2); m.ctx.fillStyle = type === 'flash' ? 'rgba(255,255,225,.48)' : type === 'he' ? 'rgba(245,95,78,.35)' : 'rgba(160,200,215,.25)'; m.ctx.fill(); }
+    const p = m.world(finite(row.x), finite(row.y)); const radius = Math.max(8, m.radius(finite(row.radius, 100))); const type = String(row.type);
+    const inner = type === 'inferno' ? '#f06e42' : type === 'smoke' ? '#9bb2c2' : type === 'flash' ? '#fff8cf' : '#ec8871';
+    const outer = type === 'inferno' ? 'rgba(235,81,45,.08)' : type === 'smoke' ? 'rgba(157,180,194,.10)' : type === 'flash' ? 'rgba(255,248,207,.08)' : 'rgba(236,136,113,.08)';
+    const gradient = m.ctx.createRadialGradient(p.x, p.y, Math.max(1, radius * .12), p.x, p.y, radius); gradient.addColorStop(0, inner + 'b8'); gradient.addColorStop(.55, inner + '54'); gradient.addColorStop(1, outer);
+    m.ctx.beginPath(); m.ctx.arc(p.x, p.y, radius, 0, Math.PI * 2); m.ctx.fillStyle = gradient; m.ctx.fill(); m.ctx.strokeStyle = inner + '70'; m.ctx.lineWidth = 1; m.ctx.stroke();
+    if (type === 'inferno') { m.ctx.beginPath(); for (let i = 0; i < 8; i += 1) { const angle = i * Math.PI / 4; m.ctx.moveTo(p.x + Math.cos(angle) * radius * .26, p.y + Math.sin(angle) * radius * .26); m.ctx.lineTo(p.x + Math.cos(angle) * radius * .72, p.y + Math.sin(angle) * radius * .72); } m.ctx.strokeStyle = 'rgba(255,202,110,.55)'; m.ctx.stroke(); }
   }
   for (const row of array(state.bundle?.tracks?.projectiles)) {
     if (state.tick < finite(row.startTick) || state.tick > finite(row.endTick)) continue;
@@ -917,9 +884,7 @@ function drawActiveBomb(m) {
   m.ctx.save();
   m.ctx.beginPath(); m.ctx.arc(point.x, point.y, pulse, 0, Math.PI * 2); m.ctx.fillStyle = 'rgba(238, 89, 74, .2)'; m.ctx.fill();
   m.ctx.beginPath(); m.ctx.arc(point.x, point.y, 10, 0, Math.PI * 2); m.ctx.fillStyle = 'rgba(8, 16, 26, .88)'; m.ctx.fill(); m.ctx.strokeStyle = '#ef7777'; m.ctx.lineWidth = 1.5; m.ctx.stroke();
-  const icon = canvasWeaponImage('c4');
-  if (icon) m.ctx.drawImage(icon, point.x - 12, point.y - 8, 24, 16);
-  else { m.ctx.font = '8px ui-monospace, monospace'; m.ctx.textAlign = 'center'; m.ctx.fillStyle = '#fff0ec'; m.ctx.fillText('C4', point.x, point.y + 3); }
+  drawWeaponGlyph(m.ctx, 'c4', point.x - 12, point.y - 8, 24, 16);
   m.ctx.restore();
 }function drawPlayers(m) {
   for (const row of Object.values(state.playerState)) {
@@ -933,10 +898,7 @@ function drawActiveBomb(m) {
       m.ctx.fillStyle = health > 50 ? '#75d69a' : health > 25 ? '#e8b260' : '#ef7777'; m.ctx.fillRect(p.x - 12, p.y - 27, 24 * health / 100, 2);
       m.ctx.font = '10px ui-monospace, monospace'; m.ctx.textAlign = 'center'; m.ctx.fillStyle = '#eef4fa'; m.ctx.fillText(row.name, p.x, p.y - 14);
     }
-    if (state.showWeapons) {
-      const weapon = canvasWeaponImage(row.weapon);
-      if (weapon) { m.ctx.save(); m.ctx.globalAlpha = row.isAlive ? 1 : .3; m.ctx.drawImage(weapon, p.x - 13, p.y + 14, 26, 16); m.ctx.restore(); }
-    }
+    if (state.showWeapons) { m.ctx.save(); m.ctx.globalAlpha = row.isAlive ? 1 : .3; drawWeaponGlyph(m.ctx, row.weapon, p.x - 13, p.y + 14, 26, 16); m.ctx.restore(); }
   }
 }
 function drawBlind(m) {
@@ -972,7 +934,21 @@ function audioPanForWorldPosition(origin) {
   const point = metrics.world(finite(origin.x), finite(origin.y));
   return clamp((point.x - metrics.width / 2) / Math.max(1, metrics.width / 2), -1, 1);
 }
+function proceduralSound(cue, gain = 1, origin = null) {
+  if (state.audioMuted || audioPlaybackBlocked()) return null;
+  const context = ensureAudioContext(); if (!context || !state.audioMaster) return null;
+  const name = String(cue || '').replace(/^procedural:/, ''); const now = context.currentTime;
+  const osc = context.createOscillator(), node = context.createGain(), panner = typeof context.createStereoPanner === 'function' ? context.createStereoPanner() : null;
+  const tones = { 'weapon-heavy': [92, .18], 'weapon-shotgun': [118, .14], 'weapon-rifle': [168, .075], 'weapon-pistol': [250, .05], bombBeepA: [760, .055], bombBeepATen: [1040, .04], bombBeepB: [680, .055], bombBeepBTen: [980, .04], c4Initiate: [310, .12], c4PlantFinish: [420, .16], c4DefuseStart: [360, .12], c4DefuseFinish: [540, .16], c4Explode: [70, .38], flashExplode: [1250, .06], smoke: [190, .16], molotov: [230, .14], molotovExtinguish: [145, .12], heExplode: [82, .24], damageKevlar: [380, .035], damageBurn: [290, .05], damageHeadshot: [620, .035], doorOpen: [150, .12], ctWin: [520, .22], terWin: [360, .22] };
+  const pair = tones[name] || [220, .08]; const frequency = pair[0]; const duration = pair[1];
+  osc.type = name.includes('weapon') || name.includes('Explode') ? 'sawtooth' : name.includes('Win') ? 'triangle' : 'sine';
+  osc.frequency.setValueAtTime(frequency, now); osc.frequency.exponentialRampToValueAtTime(Math.max(35, frequency * (name.includes('weapon') || name.includes('Explode') ? .38 : .88)), now + duration);
+  node.gain.setValueAtTime(0.0001, now); node.gain.exponentialRampToValueAtTime(clamp(gain, .001, 1.2), now + .006); node.gain.exponentialRampToValueAtTime(.0001, now + duration);
+  if (panner) { panner.pan.value = audioPanForWorldPosition(origin); osc.connect(panner); panner.connect(node); } else osc.connect(node);
+  node.connect(state.audioMaster); state.activeAudioSources.add(osc); osc.addEventListener('ended', () => state.activeAudioSources.delete(osc), { once: true }); osc.start(now); osc.stop(now + duration + .02); return osc;
+}
 async function playAudio(url, gain = 1, origin = null) {
+  if (String(url || '').startsWith('procedural:')) return proceduralSound(url, gain, origin);
   if (state.audioMuted || !url || audioPlaybackBlocked()) return null;
   const generation = state.audioGeneration; const context = ensureAudioContext(); const buffer = await audioBuffer(url);
   if (!context || !buffer || !state.audioMaster || generation !== state.audioGeneration || audioPlaybackBlocked()) return null;

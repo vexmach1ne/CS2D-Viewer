@@ -22,9 +22,10 @@ CS2D Viewer opens a local CS2 `.dem` file and turns it into a responsive tactica
 - Player positions, direction, names, health, active-weapon icons, trails, and side-coloured tracers
 - Utility effects, projectile paths, planted-bomb location, kill feed, scoreboard, round clock, and score
 - Map support for Ancient, Anubis, Dust2, Inferno, Mirage, Nuke, and Overpass, plus a usable grid fallback
-- Original synthesized event audio with viewport-relative stereo panning for weapons, utility, bomb events, damage, doors, and round results
+- Recorded OGG event audio with viewport-relative stereo panning for weapons, utility, bomb events, damage, doors, and round results
 - General, Performance, and Utility statistics for the current playback tick or full match
 - Restore the most recently opened demo and its playback position between launches
+- Optional 8x fast-freezetime playback, while live rounds continue at the selected speed
 
 ## Download and run
 
@@ -44,6 +45,7 @@ The first public builds are unsigned, so Windows may show a SmartScreen warning.
 | Previous / next round | `Shift` + `Left` / `Right` |
 | Show scoreboard | Hold `Tab` |
 | Show active weapon icons | Hold `Alt` |
+| Fast freezetime | Enable the left-panel toggle; freeze time plays at 8x the selected speed |
 | Pan camera | Right-drag |
 | Recenter camera | Double right-click |
 | Zoom | Mouse wheel — zoom-in anchors at the cursor; zoom-out anchors at the viewport centre |

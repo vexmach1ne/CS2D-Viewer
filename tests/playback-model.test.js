@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  activeBombAtTick, buildPlayerState, floorIndex, jumpRoundTick, lowerBound, resetEventCursors,
-  resolveSeek, roundIndexAtTick, samplePlayerTrack, upperBound,
+  activeBombAtTick, buildPlayerState, floorIndex, isLiveRoundTick, jumpRoundTick, lowerBound, resetEventCursors,
+  playbackRateAtTick, resolveSeek, roundIndexAtTick, samplePlayerTrack, upperBound,
 } from '../src/renderer/playback-model.js';
 
 function bundle() {
@@ -30,6 +30,29 @@ function bundle() {
     },
   };
 }
+
+test('trail phase excludes freeze and post-round intervals', () => {
+  const demo = bundle();
+  demo.rounds[0].freezeEndTick = 35;
+  demo.rounds[1].freezeEndTick = 110;
+  assert.equal(isLiveRoundTick(demo, 34), false);
+  assert.equal(isLiveRoundTick(demo, 35), true);
+  assert.equal(isLiveRoundTick(demo, 99), true);
+  assert.equal(isLiveRoundTick(demo, 100), false);
+  assert.equal(isLiveRoundTick(demo, 110), true);
+  assert.equal(isLiveRoundTick(demo, 305), false);
+});
+
+test('fast freeze-time playback is an eight-times multiplier only during freeze', () => {
+  const demo = bundle();
+  demo.rounds[0].freezeEndTick = 35;
+  assert.equal(playbackRateAtTick(demo, 20, 1, true), 8);
+  assert.equal(playbackRateAtTick(demo, 34.9, 2, true), 16);
+  assert.equal(playbackRateAtTick(demo, 35, 1, true), 1);
+  assert.equal(playbackRateAtTick(demo, 99, 1, true), 1);
+  assert.equal(playbackRateAtTick(demo, 100, 1, true), 1);
+  assert.equal(playbackRateAtTick(demo, 20, 2, false), 2);
+});
 
 test('binary search helpers select stable insertion and floor positions', () => {
   const ticks = [10, 20, 20, 40];

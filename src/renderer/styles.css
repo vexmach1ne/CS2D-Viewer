@@ -1910,3 +1910,229 @@ body {
   height: 14px;
   vertical-align: middle;
 }
+/* Expanded edge-panel player cards. */
+.team-card,
+.team-card:first-child,
+.team-card:last-child {
+  width: clamp(230px, 23vw, 340px);
+}
+
+.team-card-body {
+  padding: 6px 8px;
+}
+
+.team-card-row {
+  min-height: 82px;
+  grid-template-columns: minmax(0, 1fr) 58px;
+  align-items: start;
+  gap: 10px;
+  padding: 11px 10px 14px;
+  border-bottom-color: rgba(95, 117, 144, 0.28);
+}
+
+.team-card-row.is-alive {
+  border: 1px solid rgba(128, 150, 176, 0.22);
+  border-radius: 3px;
+  box-shadow: inset 3px 0 0 rgba(231, 238, 246, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.team-card[data-side="CT"] .team-card-row.is-alive {
+  background: linear-gradient(100deg, rgba(49, 117, 184, 0.42), rgba(15, 41, 67, 0.22) 65%, transparent);
+  border-color: rgba(103, 173, 239, 0.34);
+  box-shadow: inset 3px 0 0 var(--ct), inset 0 1px 0 rgba(185, 225, 255, 0.12);
+}
+
+.team-card[data-side="T"] .team-card-row.is-alive {
+  background: linear-gradient(100deg, rgba(169, 105, 27, 0.46), rgba(71, 40, 12, 0.22) 65%, transparent);
+  border-color: rgba(245, 177, 85, 0.36);
+  box-shadow: inset 3px 0 0 var(--t), inset 0 1px 0 rgba(255, 220, 165, 0.12);
+}
+
+.team-card-name {
+  color: #f2f6fb;
+  font-size: 15px;
+  font-weight: 760;
+  line-height: 1.1;
+}
+
+.team-card-money {
+  margin-top: 5px;
+  color: #78d27e;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.team-card-vitals {
+  display: grid;
+  grid-template-columns: repeat(3, max-content);
+  gap: 16px;
+  margin-top: 9px;
+  color: #aab7c7;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.team-card-vitals b {
+  color: #edf3fa;
+  font-weight: 750;
+}
+
+.team-card-gear {
+  width: 58px;
+  max-width: none;
+  min-height: 24px;
+  padding-top: 1px;
+  justify-content: flex-end;
+}
+
+.team-card-gear .weapon-icon.primary {
+  width: 54px;
+  height: 22px;
+}
+
+.team-card-health-track {
+  right: 10px;
+  bottom: 6px;
+  left: 10px;
+  height: 5px;
+  background: rgba(116, 134, 157, 0.35);
+}
+
+.team-card-row.is-alive .team-card-health-track {
+  background: rgba(6, 13, 21, 0.56);
+}
+/* One direct-scrub event timeline with a fine playhead. */
+.timeline-panel { min-height: 84px; padding-bottom: 12px; }
+.timeline-track { --timeline-progress: 0%; position: relative; height: 28px; margin-top: 8px; isolation: isolate; }
+.timeline-track::before { position: absolute; z-index: 0; top: 11px; left: 0; width: var(--timeline-progress); height: 4px; border-radius: 99px 0 0 99px; background: var(--accent); box-shadow: 0 0 8px rgba(232, 178, 96, 0.26); content: ''; }
+.round-markers { position: absolute; z-index: 1; inset: 0; height: 28px; }
+.round-marker-svg { height: 28px; }
+.timeline { position: absolute; z-index: 2; inset: 0; width: 100%; height: 28px; margin: 0; cursor: ew-resize; }
+.timeline::-webkit-slider-runnable-track { height: 4px; border: 1px solid rgba(86, 111, 140, 0.54); border-radius: 99px; background: transparent; box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.48); }
+.timeline::-webkit-slider-thumb { width: 2px; height: 28px; margin-top: -13px; border: 0; border-radius: 0; background: #f4f8fc; box-shadow: 0 0 0 1px rgba(7, 15, 25, 0.85), 0 0 9px rgba(235, 246, 255, 0.72); }
+.timeline-event { stroke: #0b1420; }
+/* Match masthead: scoreboard and round clock live directly above the event timeline. */
+.brand-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-tick {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.header-tick input {
+  width: 88px;
+  min-height: 25px;
+  padding: 3px 6px;
+  border: 1px solid rgba(105, 133, 163, 0.42);
+  border-radius: 3px;
+  background: #07101a;
+  color: var(--text);
+  font: 700 10px var(--mono);
+}
+
+.timeline-panel {
+  min-height: 118px;
+  padding: 0 16px 12px;
+}
+
+.timeline-panel .match-hud {
+  position: relative;
+  top: auto;
+  left: auto;
+  display: block;
+  width: 100%;
+  height: 70px;
+  transform: none;
+}
+
+.timeline-panel .match-score {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 154px minmax(0, 1fr);
+  align-items: center;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.match-score-side {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  min-width: 0;
+}
+
+.match-score-side.left { grid-column: 1; justify-content: flex-end; }
+.match-score-side.right { grid-column: 3; justify-content: flex-start; }
+
+.timeline-panel .match-score-team {
+  max-width: min(28vw, 260px);
+  font-size: clamp(14px, 1.25vw, 20px);
+  font-weight: 800;
+  letter-spacing: 0.025em;
+}
+
+.timeline-panel .match-score-value {
+  font-size: clamp(25px, 2.1vw, 34px);
+  line-height: 1;
+}
+
+.timeline-panel .clock-label {
+  position: absolute;
+  z-index: 1;
+  top: 4px;
+  left: 50%;
+  display: grid;
+  min-width: 136px;
+  min-height: 62px;
+  padding: 7px 10px;
+  transform: translateX(-50%);
+  background: #0a131f;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+}
+
+.timeline-panel .clock-label strong { font-size: 25px; }
+.timeline-panel .clock-phase { display: none; }
+.timeline-panel .clock-round { color: #bac7d5; font-size: 10px; }
+
+@media (max-width: 760px) {
+  .header-tick { display: none; }
+  .timeline-panel .match-score { grid-template-columns: minmax(0, 1fr) 126px minmax(0, 1fr); }
+  .timeline-panel .clock-label { min-width: 112px; }
+  .match-score-side { gap: 7px; }
+  .timeline-panel .match-score-team { max-width: 20vw; font-size: 12px; }
+}
+.timeline-track.is-locked { opacity: 0.48; cursor: not-allowed; }
+.timeline-track.is-locked .timeline { cursor: not-allowed; }
+
+.fast-freezetime-toggle {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(91, 115, 142, 0.24);
+}
+
+.fast-freezetime-toggle small {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}

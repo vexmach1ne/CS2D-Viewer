@@ -115,7 +115,7 @@ function prepareSession(localAppDataRoot, sourceMode) {
   fs.writeFileSync(path.join(appRoot, 'preferences.json'), `${JSON.stringify({
     schemaVersion: 1,
     audio: { muted: true, volume: 0.4 },
-    visuals: { showTrails: true, showShots: true, showNades: true, showTeamCards: true, showPlayerLabels: true },
+    visuals: { showTrails: true, showShots: true, showNades: true, showTeamCards: true, showPlayerLabels: true, fastFreezeTime: true },
     mapLayouts: { de_mirage: { scale: 1.45, panX: -0.014, panY: 0.002, zoom: 0.74 } },
   }, null, 2)}\n`);
 }
@@ -219,8 +219,12 @@ async function main() {
         rebuildDisabled: document.querySelector('#rebuildDemoBtn')?.disabled,
         mapStatus: document.querySelector('#mapStatus')?.textContent,
         teamCards: document.querySelectorAll('.team-card').length,
+        alivePlayerCards: document.querySelectorAll('.team-card-row.is-alive').length,
+        playerMoney: document.querySelector('.team-card-money')?.textContent,
+        playerKad: document.querySelector('.team-card-vitals')?.textContent,
         warningText: document.querySelector('#warningsBtn')?.textContent,
         tick: Number(document.querySelector('#tickInput')?.value),
+        fastFreezeTime: Boolean(document.querySelector('#fastFreezetimeToggle')?.checked),
       };
     })()`));
     assert.equal(restored.emptyHidden, true);
@@ -230,6 +234,7 @@ async function main() {
     assert.equal(restored.teamCards, 2);
     assert.match(restored.warningText, /warning/i);
     assert.equal(restored.tick, 96);
+    assert.equal(restored.fastFreezeTime, true);
 
     const stats = await cdp.evaluate(`(() => {
       document.querySelector('.team-card')?.click();
@@ -239,12 +244,16 @@ async function main() {
         overlayOpen: !document.querySelector('#statsOverlay')?.classList.contains('hidden'),
         title: document.querySelector('#statsTitle')?.textContent,
         rows: document.querySelectorAll('#statsContent tbody tr').length,
+        teams: document.querySelectorAll('#statsContent .stats-team-block').length,
+        timelineLocked: Boolean(document.querySelector('#timelineInput')?.disabled && document.querySelector('#tickInput')?.disabled),
         scopeActive: document.querySelector('[data-stats-scope="full"]')?.classList.contains('is-active'),
       };
     })()`);
     assert.equal(stats.overlayOpen, true);
     assert.match(stats.title, /Alpha statistics/);
-    assert.ok(stats.rows >= 4);
+    assert.ok(stats.rows >= 1);
+    assert.equal(stats.teams, 1);
+    assert.equal(stats.timelineLocked, true);
     assert.equal(stats.scopeActive, true);
 
     const scoreboard = await cdp.evaluate(`(() => {

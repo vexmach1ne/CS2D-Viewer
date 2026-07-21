@@ -223,6 +223,10 @@ test('counts firearm shots and throw events, including undetonated utility', () 
   assert.equal(a1.totalThrows, 1);
   assert.equal(isFirearmWeapon('weapon_m4a1_silencer'), true);
   assert.equal(isFirearmWeapon('knife_karambit'), false);
+  assert.equal(isFirearmWeapon('weapon_hegrenade'), false);
+  assert.equal(isFirearmWeapon('weapon_smokegrenade'), false);
+  assert.equal(isFirearmWeapon('weapon_c4'), false);
+  assert.equal(isFirearmWeapon('weapon_galilar'), true);
   assert.equal(normalizeUtilityType('incgrenade'), 'inferno');
 });
 

@@ -1825,7 +1825,7 @@ function buildDemoViewerBundle(demo, options = {}) {
     hurtsByAttacker.get(sid).push(hurt);
   }
   const hurtCursors = new Map();
-  const tracerWorldLength = 2000;
+  const tracerWorldLength = 1000;
   const shotsWithImpacts = shots.map((shot) => {
     const sid = String(shot.shooterSteamId || '');
     const list = impactsByShooter.get(sid) || [];

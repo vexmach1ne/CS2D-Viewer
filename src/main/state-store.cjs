@@ -88,6 +88,7 @@ function defaultPreferences() {
       showNades: true,
       showTeamCards: true,
       showPlayerLabels: true,
+      fastFreezeTime: false,
     },
     mapLayoutVersion: MAP_LAYOUT_VERSION,
     mapLayouts: JSON.parse(JSON.stringify(DEFAULT_MAP_LAYOUTS)),

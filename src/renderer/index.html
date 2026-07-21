@@ -17,7 +17,10 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <div>
             <p class="eyebrow">TACTICAL REPLAY</p>
-            <h1>CS2 Demo Viewer</h1>
+            <div class="brand-title-row">
+              <h1>CS2 Demo Viewer</h1>
+              <label class="header-tick">Tick <input id="tickInput" type="number" min="0" max="1" value="0" disabled /></label>
+            </div>
           </div>
         </div>
         <div class="demo-heading" aria-live="polite">
@@ -52,6 +55,11 @@
                 <option value="4">4×</option>
               </select>
             </div>
+            <label class="toggle fast-freezetime-toggle" title="Play freeze time at eight times the selected speed.">
+              <input id="fastFreezetimeToggle" type="checkbox" />
+              <span>Fast freezetime</span>
+              <small>8×</small>
+            </label>
             <div class="control-pair control-pair-stacked">
               <label for="followSelect">Camera</label>
               <select id="followSelect" disabled>
@@ -112,22 +120,19 @@
 
         <section class="viewer-column" aria-label="2D demo playback">
           <div class="timeline-panel">
-            <div class="timeline-label-row">
-              <div class="round-chip" id="roundLabel">Round —</div>
-              <label class="tick-entry">Tick <input id="tickInput" type="number" min="0" max="1" value="0" disabled /></label>
-              <span id="timeLabel" class="mono timeline-time">00:00 / 00:00</span>
+            <div class="match-hud" aria-live="off">
+              <div id="matchScoreLabel" class="match-score"></div>
+              <div id="clockLabel" class="clock-label"></div>
             </div>
-            <input id="timelineInput" class="timeline" type="range" min="0" max="1" step="1" value="0" disabled aria-label="Demo timeline" />
-            <div id="roundMarkers" class="round-markers" aria-hidden="true"></div>
+            <div id="timelineTrack" class="timeline-track">
+              <div id="roundMarkers" class="round-markers" aria-hidden="true"></div>
+              <input id="timelineInput" class="timeline" type="range" min="0" max="1" step="1" value="0" disabled aria-label="Demo timeline" />
+            </div>
           </div>
 
           <div id="canvasWrap" class="canvas-wrap">
             <canvas id="viewerCanvas" width="1400" height="860" tabindex="0" aria-label="Top-down CS2 demo map"></canvas>
 
-            <div class="match-hud" aria-live="off">
-              <div id="clockLabel" class="clock-label"></div>
-              <div id="matchScoreLabel" class="match-score"></div>
-            </div>
 
             <div id="nukeLayerToggle" class="nuke-toggle hidden" role="group" aria-label="Nuke floor">
               <button id="nukeLayerABtn" class="nuke-layer-button is-active" type="button">A site</button>

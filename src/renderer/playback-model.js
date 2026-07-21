@@ -151,6 +151,42 @@ export function roundIndexAtTick(bundle, tick) {
   return found;
 }
 
+/**
+ * Trails are meaningful only after freeze time and before the round ends.
+ * Keeping this phase check in the playback model prevents spawn resets from
+ * being joined to late-round movement by sampled trails.
+ * @param {any} bundle
+ * @param {number} tick
+ */
+export function isLiveRoundTick(bundle, tick) {
+  const round = array(bundle?.rounds)[roundIndexAtTick(bundle, tick)];
+  if (!round) return false;
+  const roundStart = finite(round.startTick);
+  const liveStart = Math.max(roundStart, finite(round.freezeEndTick, roundStart));
+  const roundEnd = Math.max(liveStart, finite(round.endTick, liveStart));
+  return finite(tick) >= liveStart && finite(tick) <= roundEnd;
+}
+
+/**
+ * Applies the optional eight-times multiplier only inside a round's freeze phase.
+ * The selected playback speed stays unchanged for live play and inter-round waits.
+ * @param {any} bundle
+ * @param {number} tick
+ * @param {number} baseRate
+ * @param {boolean} [fastFreezeTime]
+ */
+export function playbackRateAtTick(bundle, tick, baseRate, fastFreezeTime = false) {
+  const rate = Math.max(0, finite(baseRate, 1));
+  if (!fastFreezeTime) return rate;
+  const round = array(bundle?.rounds)[roundIndexAtTick(bundle, tick)];
+  if (!round) return rate;
+  const roundStart = finite(round.startTick);
+  const freezeEnd = Math.max(roundStart, finite(round.freezeEndTick, roundStart));
+  const roundEnd = Math.max(freezeEnd, finite(round.endTick, freezeEnd));
+  const selectedTick = finite(tick);
+  return selectedTick >= roundStart && selectedTick < freezeEnd && selectedTick <= roundEnd ? rate * 8 : rate;
+}
+
 /** @param {any} bundle @param {number} tick @param {number} direction */
 export function jumpRoundTick(bundle, tick, direction) {
   const rounds = array(bundle?.rounds);

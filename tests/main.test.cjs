@@ -49,13 +49,14 @@ test('session and preference patches are validated and clamped', (t) => {
     playback: { lastTick: 12.7, followSteamId: '76561198000000000', speed: 4 },
     preferences: {
       audio: { muted: true, volume: 9 },
-      visuals: { showTrails: false },
+      visuals: { showTrails: false, fastFreezeTime: true },
       mapLayouts: { de_mirage: { scale: 99, panX: -9, panY: 0.2, zoom: 0.1 } },
     },
   });
   assert.deepEqual(result.session.playback, { lastTick: 13, followSteamId: '76561198000000000', speed: 4 });
   assert.equal(result.preferences.audio.volume, 1);
   assert.equal(result.preferences.visuals.showTrails, false);
+  assert.equal(result.preferences.visuals.fastFreezeTime, true);
   assert.deepEqual(result.preferences.mapLayouts.de_mirage, { scale: 2.4, panX: -0.8, panY: 0.2, zoom: 0.5 });
   assert.deepEqual(readSession(paths), result.session);
   assert.deepEqual(readPreferences(paths), result.preferences);

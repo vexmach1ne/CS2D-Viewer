@@ -1,10 +1,12 @@
 // @ts-check
 
-import { computeMatchStats } from './stats.js';
+import { computeMatchStats, isFirearmWeapon } from './stats.js';
 import {
   activeBombAtTick,
   floorIndex,
+  isLiveRoundTick,
   jumpRoundTick,
+  playbackRateAtTick,
   maxTrackTick,
   resetEventCursors,
   resolveSeek,
@@ -26,7 +28,7 @@ import {
 /**
  * @typedef {object} ViewerPreferences
  * @property {{volume?:number,muted?:boolean}=} audio
- * @property {{labels?:boolean,trails?:boolean,shots?:boolean,nades?:boolean,teamCards?:boolean}=} visual
+ * @property {{labels?:boolean,trails?:boolean,shots?:boolean,nades?:boolean,teamCards?:boolean,fastFreezeTime?:boolean}=} visual
  * @property {Record<string,{scale:number,panX:number,panY:number,zoom:number}>=} mapLayouts
  */
 /**
@@ -56,8 +58,10 @@ const dom = {
   prevRoundBtn: document.querySelector('#prevRoundBtn'),
   nextRoundBtn: document.querySelector('#nextRoundBtn'),
   speedSelect: document.querySelector('#speedSelect'),
+  fastFreezetimeToggle: document.querySelector('#fastFreezetimeToggle'),
   followSelect: document.querySelector('#followSelect'),
   timelineInput: document.querySelector('#timelineInput'),
+  timelineTrack: document.querySelector('#timelineTrack'),
   tickInput: document.querySelector('#tickInput'),
   timeLabel: document.querySelector('#timeLabel'),
   roundLabel: document.querySelector('#roundLabel'),
@@ -164,6 +168,7 @@ const state = {
   tickFloat: 0,
   playing: false,
   speed: 1,
+  fastFreezeTime: false,
   followSteamId: '',
   playerState: /** @type {Record<string, any>} */ ({}),
   lastPlayerState: /** @type {Record<string, any>} */ ({}),
@@ -339,15 +344,17 @@ function setLoading(visible, progress = {}) {
 }
 
 function setControlsEnabled(enabled) {
+  const timelineLocked = !enabled || state.statsOpen;
   for (const element of [dom.playPauseBtn, dom.prevRoundBtn, dom.nextRoundBtn, dom.speedSelect, dom.followSelect, dom.timelineInput, dom.tickInput]) {
     if (element instanceof HTMLButtonElement || element instanceof HTMLInputElement || element instanceof HTMLSelectElement) {
-      element.disabled = !enabled;
+      const isTimelineControl = element === dom.timelineInput || element === dom.tickInput;
+      element.disabled = !enabled || (isTimelineControl && timelineLocked);
     }
   }
+  dom.timelineTrack?.classList.toggle('is-locked', timelineLocked);
   if (dom.saveMapLayoutBtn instanceof HTMLButtonElement) dom.saveMapLayoutBtn.disabled = !enabled || !state.mapKey;
   if (dom.resetMapLayoutBtn instanceof HTMLButtonElement) dom.resetMapLayoutBtn.disabled = !enabled || !state.mapKey;
 }
-
 function showWarnings(warnings) {
   state.warnings = Array.from(new Set(array(warnings).map((row) => String(row || '').trim()).filter(Boolean)));
   if (dom.warningsBtn) {
@@ -434,6 +441,7 @@ function currentPreferences() {
       showShots: state.showShots,
       showNades: state.showNades,
       showTeamCards: state.showTeamCards,
+      fastFreezeTime: state.fastFreezeTime,
     },
     mapLayouts: state.mapLayouts,
   };
@@ -449,6 +457,7 @@ function applyPreferences(preferences) {
   state.showShots = Boolean(visuals.showShots ?? visuals.shots ?? state.showShots);
   state.showNades = Boolean(visuals.showNades ?? visuals.nades ?? state.showNades);
   state.showTeamCards = Boolean(visuals.showTeamCards ?? visuals.teamCards ?? state.showTeamCards);
+  state.fastFreezeTime = Boolean(visuals.fastFreezeTime ?? state.fastFreezeTime);
   state.mapLayouts = {};
   if (prefs.mapLayouts && typeof prefs.mapLayouts === 'object') {
     for (const [key, value] of Object.entries(prefs.mapLayouts)) {
@@ -465,6 +474,7 @@ function syncPreferenceControls() {
   if (dom.showShotsToggle instanceof HTMLInputElement) dom.showShotsToggle.checked = state.showShots;
   if (dom.showNadesToggle instanceof HTMLInputElement) dom.showNadesToggle.checked = state.showNades;
   if (dom.showTeamCardsToggle instanceof HTMLInputElement) dom.showTeamCardsToggle.checked = state.showTeamCards;
+  if (dom.fastFreezetimeToggle instanceof HTMLInputElement) dom.fastFreezetimeToggle.checked = state.fastFreezeTime;
   if (dom.audioVolumeInput instanceof HTMLInputElement) dom.audioVolumeInput.value = String(state.audioVolume);
   if (dom.audioVolumeText) dom.audioVolumeText.textContent = `${Math.round(state.audioVolume * 100)}%`;
   dom.audioMuteBtn?.classList.toggle('is-muted', state.audioMuted);
@@ -666,16 +676,16 @@ function renderRoundMarkers() {
   const maxTick = Math.max(1, totalTicks()); const tracks = state.bundle.tracks || {};
   const point = (tick) => clamp(finite(tick) / maxTick * 1000, 0, 1000);
   const rounds = array(state.bundle.rounds).map((round, index) => {
-    const x = point(round.startTick); return `<line class="timeline-round-marker" x1="${x}" x2="${x}" y1="2" y2="18"><title>Round ${escapeHtml(round.round || index + 1)}</title></line>`;
+    const x = point(round.startTick); return `<line class="timeline-round-marker" x1="${x}" x2="${x}" y1="3" y2="23"><title>Round ${escapeHtml(round.round || index + 1)}</title></line>`;
   }).join('');
   const events = [
     ...array(tracks.kills).map((row) => ({ tick: row.tick, kind: 'kill' })),
     ...array(tracks.bombs).filter((row) => ['planted', 'defused', 'exploded'].includes(String(row.type))).map((row) => ({ tick: row.tick, kind: `bomb ${escapeHtml(String(row.type))}` })),
     ...array(tracks.nades).filter((row) => ['flash', 'he', 'smoke', 'inferno'].includes(String(row.type))).map((row) => ({ tick: row.tick, kind: `utility ${escapeHtml(String(row.type))}` })),
   ].filter((row) => finite(row.tick) >= 0 && finite(row.tick) <= maxTick).sort((a, b) => finite(a.tick) - finite(b.tick)).map((row) => {
-    const x = point(row.tick); return `<circle class="timeline-event ${row.kind}" cx="${x}" cy="10" r="3"><title>${row.kind}</title></circle>`;
+    const x = point(row.tick); return `<circle class="timeline-event ${row.kind}" cx="${x}" cy="13" r="3"><title>${row.kind}</title></circle>`;
   }).join('');
-  dom.roundMarkers.innerHTML = `<svg class="round-marker-svg" viewBox="0 0 1000 20" preserveAspectRatio="none" aria-hidden="true"><line class="timeline-base-line" x1="0" x2="1000" y1="10" y2="10"/>${rounds}${events}</svg>`;
+  dom.roundMarkers.innerHTML = `<svg class="round-marker-svg" viewBox="0 0 1000 26" preserveAspectRatio="none" aria-hidden="true"><line class="timeline-base-line" x1="0" x2="1000" y1="13" y2="13"/>${rounds}${events}</svg>`;
 }
 async function loadMapArt() {
   state.mapImage = null; state.nukeImages = { A: null, B: null };
@@ -742,7 +752,7 @@ function endTimelineScrub() {
 function updatePlaybackUi() {
   if (!state.bundle) return;
   const maxTick = totalTicks(); const progress = maxTick ? clamp(state.tick / maxTick * 100, 0, 100) : 0;
-  if (dom.timelineInput instanceof HTMLInputElement) { dom.timelineInput.max = String(maxTick); dom.timelineInput.value = String(state.tick); dom.timelineInput.style.setProperty('--timeline-progress', `${progress}%`); }
+  if (dom.timelineInput instanceof HTMLInputElement) { dom.timelineInput.max = String(maxTick); dom.timelineInput.value = String(state.tick); dom.timelineInput.style.setProperty('--timeline-progress', `${progress}%`); if (dom.timelineTrack instanceof HTMLElement) dom.timelineTrack.style.setProperty('--timeline-progress', `${progress}%`); }
   if (dom.tickInput instanceof HTMLInputElement) { dom.tickInput.max = String(maxTick); dom.tickInput.value = String(state.tick); }
   if (dom.timeLabel) dom.timeLabel.textContent = `${formatDuration(state.tick / tickRate())} / ${formatDuration(maxTick / tickRate())}`;
   const index = roundIndexAtTick();
@@ -793,7 +803,11 @@ function renderHud() {
   }
   if (dom.matchScoreLabel) {
     const teams = array(stats?.teams).slice(0, 2);
-    dom.matchScoreLabel.innerHTML = teams.map((team) => `<span class="match-score-team ${normalizeSide(team.side).toLowerCase()}">${escapeHtml(team.name)}</span><strong class="match-score-value ${normalizeSide(team.side).toLowerCase()}">${finite(team.score)}</strong>`).join('<span class="match-score-separator">—</span>');
+    dom.matchScoreLabel.innerHTML = teams.map((team, index) => {
+      const side = normalizeSide(team.side).toLowerCase();
+      const slot = index === 0 ? 'left' : 'right';
+      return `<span class="match-score-side ${slot} ${side}"><span class="match-score-team ${side}">${escapeHtml(team.name)}</span><strong class="match-score-value ${side}">${finite(team.score)}</strong></span>`;
+    }).join('');
   }
   renderTeamCards(stats); renderKillFeed();
   if (state.scoreboardOpen) renderScoreboard(stats);
@@ -814,7 +828,8 @@ function renderTeamCards(stats) {
     const rows = array(team.players).map((player) => {
       const live = state.playerState[player.steamId] || {};
       const gear = live.inventory?.find((item) => PRIMARY_WEAPONS.has(String(item).toLowerCase())) || live.weapon;
-      return `<div class="team-card-row${live.isAlive === false ? ' is-dead' : ''}"><div class="team-card-main"><div class="team-card-name">${escapeHtml(player.name)}</div><div class="team-card-vitals"><span>${live.health ?? 0} HP</span><span>${live.armor ?? 0} ARM</span><span>$${finite(live.money).toLocaleString()}</span></div></div><div class="team-card-gear">${weaponIcon(gear, true)}</div><span class="team-card-health-track"><progress class="team-card-health-fill" max="100" value="${clamp(live.health, 0, 100)}"></progress></span></div>`;
+      const stateClass = live.isAlive === false ? ' is-dead' : ' is-alive';
+      return `<div class="team-card-row${stateClass}"><div class="team-card-main"><div class="team-card-name">${escapeHtml(player.name)}</div><div class="team-card-money">$${finite(live.money).toLocaleString()}</div><div class="team-card-vitals"><span>K <b>${finite(player.kills)}</b></span><span>A <b>${finite(player.assists)}</b></span><span>D <b>${finite(player.deaths)}</b></span></div></div><div class="team-card-gear">${weaponIcon(gear, true)}</div><span class="team-card-health-track"><progress class="team-card-health-fill" max="100" value="${clamp(live.health, 0, 100)}"></progress></span></div>`;
     }).join('');
     return `<button class="team-card" type="button" data-team-id="${escapeHtml(team.id)}" data-side="${escapeHtml(team.side)}"><span class="team-card-header"><span>${escapeHtml(team.name)}</span><span class="team-card-score">${finite(team.score)}</span></span><span class="team-card-body">${rows}</span></button>`;
   }).join('');
@@ -849,21 +864,20 @@ function renderStatsOverlay() {
   const stats = statsAt(tick, true); if (!stats) return;
   const columns = STAT_COLUMNS[state.statsCategory];
   const focusTeam = array(stats.teams).find((team) => team.id === state.statsFocusTeamId);
+  const teamsToRender = focusTeam ? [focusTeam] : array(stats.teams);
   if (dom.statsTitle) dom.statsTitle.textContent = focusTeam ? `${focusTeam.name} statistics` : 'Match statistics';
   if (dom.statsMeta) dom.statsMeta.textContent = `${state.statsScope === 'full' ? 'Full match' : `Through tick ${state.tick.toLocaleString()}`} · ${stats.roundsCompleted} completed rounds`;
-  dom.statsContent.innerHTML = array(stats.teams).map((team) => `<section class="stats-team-block"><div class="stats-team-heading" data-side="${team.side}"><strong>${escapeHtml(team.name)}</strong><span>${finite(team.score)} rounds · ${team.side}</span></div><div class="stats-table-wrap"><table class="stats-table"><thead><tr><th>Player</th>${columns.map(([, label]) => `<th>${escapeHtml(label)}</th>`).join('')}</tr></thead><tbody>${array(team.players).map((row) => `<tr${team.id === state.statsFocusTeamId ? ' class="is-focus-row"' : ''}><td>${escapeHtml(row.name)}</td>${columns.map(([key, label]) => `<td>${formatStat(nestedValue(row, key), label)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`).join('') || '<div class="stats-empty">No statistics are available.</div>';
-}
-function openStats(focusTeamId = '') {
+  dom.statsContent.innerHTML = teamsToRender.map((team) => `<section class="stats-team-block"><div class="stats-team-heading" data-side="${team.side}"><strong>${escapeHtml(team.name)}</strong><span>${finite(team.score)} rounds · ${team.side}</span></div><div class="stats-table-wrap"><table class="stats-table"><thead><tr><th>Player</th>${columns.map(([, label]) => `<th>${escapeHtml(label)}</th>`).join('')}</tr></thead><tbody>${array(team.players).map((row) => `<tr><td>${escapeHtml(row.name)}</td>${columns.map(([key, label]) => `<td>${formatStat(nestedValue(row, key), label)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`).join('') || '<div class="stats-empty">No statistics are available.</div>';
+}function openStats(focusTeamId = '') {
   if (!state.bundle || state.statsOpen) return;
   state.statsResume = state.playing; setPlaying(false); state.statsOpen = true; state.statsFocusTeamId = String(focusTeamId || '');
-  dom.statsOverlay?.classList.remove('hidden'); renderStatsOverlay(); if (dom.closeStatsBtn instanceof HTMLButtonElement) dom.closeStatsBtn.focus();
+  setControlsEnabled(true); dom.statsOverlay?.classList.remove('hidden'); renderStatsOverlay(); if (dom.closeStatsBtn instanceof HTMLButtonElement) dom.closeStatsBtn.focus();
 }
 function closeStats() {
   if (!state.statsOpen) return;
-  state.statsOpen = false; dom.statsOverlay?.classList.add('hidden');
+  state.statsOpen = false; setControlsEnabled(Boolean(state.bundle)); dom.statsOverlay?.classList.add('hidden');
   if (state.statsResume) setPlaying(true); state.statsResume = false;
 }
-
 function canvasMetrics() {
   const canvas = dom.viewerCanvas;
   if (!(canvas instanceof HTMLCanvasElement) || !state.bundle) return null;
@@ -911,7 +925,7 @@ function drawMap(m) {
   m.ctx.save(); m.ctx.globalAlpha = .92; m.ctx.drawImage(image, x, y, width, height); m.ctx.restore();
 }
 function drawTrails(m) {
-  if (!state.showTrails) return;
+  if (!state.showTrails || !isLiveRoundTick(state.bundle, state.tick)) return;
   for (const [id, track] of Object.entries(state.bundle?.tracks?.ticksByPlayer || {})) {
     const ticks = array(track.tick); const end = floorIndex(ticks, state.tick); if (end < 1) continue;
     const start = Math.max(0, end - 20); m.ctx.beginPath();
@@ -922,11 +936,18 @@ function drawTrails(m) {
 function drawShots(m) {
   if (!state.showShots) return;
   for (const row of array(state.bundle?.tracks?.shots)) {
+    const firearm = row.isFirearm === true || (row.isFirearm !== false && isFirearmWeapon(row.weapon));
+    if (!firearm) continue;
     const age = state.tick - finite(row.tick); if (age < 0 || age > 12) continue;
     const shooter = samplePlayerTrack(state.bundle?.tracks?.ticksByPlayer?.[String(row.shooterSteamId || '')], finite(row.tick));
     const side = shooter?.side || normalizeSide(row.shooterTeam || row.team);
     const rgb = side === 'T' ? '232,165,88' : side === 'CT' ? '116,174,233' : '255,225,158';
-    const a = m.world(finite(row.x), finite(row.y)); const b = m.world(finite(row.endX, row.x), finite(row.endY, row.y));
+    const a = m.world(finite(row.x), finite(row.y));
+    const hasImpact = array(row.impactPoints).length > 0;
+    const fallbackLength = 1000;
+    const fallbackEndX = finite(row.x) + Math.cos(finite(row.yaw) * Math.PI / 180) * fallbackLength;
+    const fallbackEndY = finite(row.y) + Math.sin(finite(row.yaw) * Math.PI / 180) * fallbackLength;
+    const b = m.world(hasImpact ? finite(row.endX, fallbackEndX) : fallbackEndX, hasImpact ? finite(row.endY, fallbackEndY) : fallbackEndY);
     m.ctx.beginPath(); m.ctx.moveTo(a.x, a.y); m.ctx.lineTo(b.x, b.y); m.ctx.strokeStyle = 'rgba(' + rgb + ',' + (1 - age / 12) + ')'; m.ctx.lineWidth = row.didDamage ? 2 : 1; m.ctx.stroke();
   }
 }
@@ -1045,6 +1066,14 @@ async function playAudio(url, gain = 1, origin = null) {
 }
 function groupGain(group) { return finite(state.audioConfig?.groups?.[group], .5); }
 function chooseAudio(rows, key) { const list = array(rows); if (!list.length) return ''; const index = state.audioRoundRobin[key] || 0; state.audioRoundRobin[key] = index + 1; return list[index % list.length]; }
+function weaponAudioKey(weapon) { return String(weapon || '').trim().toLowerCase().replace(/^weapon_/, '').replace(/_/g, ' '); }
+function playWeaponAudio(row) {
+  const firearm = row?.isFirearm === true || (row?.isFirearm !== false && isFirearmWeapon(row?.weapon));
+  if (!firearm) return null;
+  const key = weaponAudioKey(row?.weapon);
+  const weapons = state.audioCatalog?.weapons || {};
+  return playAudio(chooseAudio(weapons[key] || weapons.default, 'w:' + (key || 'default')), groupGain('weapons'), row);
+}
 function stopActiveAudio() { for (const source of state.activeAudioSources) { try { source.stop(); } catch { /* A source may have ended before a seek. */ } } state.activeAudioSources.clear(); }
 function stopMolotovAudio() { for (const source of state.activeMolotovSources) { try { source.stop(); } catch { /* A source may already have ended during a seek. */ } } state.activeMolotovSources = []; }
 function playGroup(group, origin = null) { return playAudio(chooseAudio(state.audioCatalog?.groups?.[group], group), groupGain(group), origin); }
@@ -1057,7 +1086,7 @@ function processAudioEvents(_fromTick, toTick) {
   if (!state.playing || !state.audioCatalog) return;
   if (audioPlaybackBlocked()) { state.audioCursors = resetEventCursors(state.bundle, toTick); return; }
   const tracks = state.bundle?.tracks || {};
-  processRows('shots', array(tracks.shots), toTick, (row) => playAudio(chooseAudio(state.audioCatalog.weapons?.[String(row.weapon).toLowerCase()], `w:${row.weapon}`), groupGain('weapons'), row));
+  processRows('shots', array(tracks.shots), toTick, playWeaponAudio);
   processRows('nades', array(tracks.nades), toTick, (row) => { const type = String(row.type); if (type === 'flash') playGroup('flashExplode', row); else if (type === 'he') playGroup('heExplode', row); else if (type === 'smoke') playGroup('smoke', row); else if (type === 'inferno') playGroup('molotov', row); else if (type === 'inferno_extinguish') playGroup('molotovExtinguish', row); });
   processRows('bombs', array(tracks.bombs), toTick, (row) => { const type = String(row.type); if (type === 'plant_start') playGroup('c4Initiate', row); else if (type === 'planted') playGroup('c4PlantFinish', row); else if (type === 'defuse_start') playGroup('c4DefuseStart', row); else if (type === 'defused') playGroup('c4DefuseFinish', row); else if (type === 'exploded') playGroup('c4Explode', row); });
   processRows('hurts', array(tracks.hurts), toTick, (row) => { state.damageFlashEnds[String(row.victimSteamId)] = finite(row.tick) + PLAYER_DAMAGE_FLASH_TICKS; const now = performance.now(); if (now - state.audioLastDamageMs > finite(state.audioConfig?.damageCooldownMs, 500)) { state.audioLastDamageMs = now; playGroup(row.headshot ? 'damageHeadshot' : String(row.weapon).includes('molotov') ? 'damageBurn' : 'damageKevlar', row); } });
@@ -1087,14 +1116,15 @@ function bindUi() {
   dom.timelineInput?.addEventListener('pointercancel', endTimelineScrub);
   dom.timelineInput?.addEventListener('change', endTimelineScrub);
   window.addEventListener('pointerup', endTimelineScrub);
-  dom.timelineInput?.addEventListener('input', () => { if (dom.timelineInput instanceof HTMLInputElement) setTick(finite(dom.timelineInput.value), { reset: true }); });
-  dom.tickInput?.addEventListener('change', () => { if (dom.tickInput instanceof HTMLInputElement) setTick(finite(dom.tickInput.value), { reset: true }); });
+  dom.timelineInput?.addEventListener('input', () => { if (!state.statsOpen && dom.timelineInput instanceof HTMLInputElement) setTick(finite(dom.timelineInput.value), { reset: true }); });
+  dom.tickInput?.addEventListener('change', () => { if (!state.statsOpen && dom.tickInput instanceof HTMLInputElement) setTick(finite(dom.tickInput.value), { reset: true }); });
   const bindToggle = (element, setter) => element?.addEventListener('change', () => { if (element instanceof HTMLInputElement) setter(element.checked); renderHud(); scheduleSessionSave(); });
   bindToggle(dom.showLabelsToggle, (value) => { state.showLabels = value; });
   bindToggle(dom.showTrailsToggle, (value) => { state.showTrails = value; });
   bindToggle(dom.showShotsToggle, (value) => { state.showShots = value; });
   bindToggle(dom.showNadesToggle, (value) => { state.showNades = value; });
   bindToggle(dom.showTeamCardsToggle, (value) => { state.showTeamCards = value; });
+  bindToggle(dom.fastFreezetimeToggle, (value) => { state.fastFreezeTime = value; });
   dom.audioMuteBtn?.addEventListener('click', () => { state.audioMuted = !state.audioMuted; syncPreferenceControls(); scheduleSessionSave(); });
   dom.audioVolumeInput?.addEventListener('input', () => { if (dom.audioVolumeInput instanceof HTMLInputElement) state.audioVolume = clamp(dom.audioVolumeInput.value, 0, 1); syncPreferenceControls(); scheduleSessionSave(); });
   for (const input of [dom.mapScaleInput, dom.mapPanXInput, dom.mapPanYInput, dom.mapZoomInput]) input?.addEventListener('input', applyLayoutInputs);
@@ -1148,7 +1178,7 @@ function bindKeyboard() {
   window.addEventListener('keydown', (event) => {
     const typing = event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement;
     if (event.key === 'Escape' && state.statsOpen) { closeStats(); event.preventDefault(); return; }
-    if (typing || !state.bundle) return;
+    if (typing || !state.bundle || state.statsOpen) return;
     if (event.code === 'Space') { setPlaying(!state.playing); event.preventDefault(); }
     else if (event.key === 'ArrowLeft') { event.shiftKey ? jumpRound(-1) : setTick(state.tick - tickRate() * 5, { reset: true }); event.preventDefault(); }
     else if (event.key === 'ArrowRight') { event.shiftKey ? jumpRound(1) : setTick(state.tick + tickRate() * 5, { reset: true }); event.preventDefault(); }
@@ -1161,7 +1191,8 @@ function bindKeyboard() {
 function animationFrame(now) {
   const elapsed = state.lastFrameMs ? Math.min(100, now - state.lastFrameMs) : 0; state.lastFrameMs = now;
   if (state.playing && state.bundle && !state.timelineScrubbing) {
-    const next = state.tickFloat + elapsed / 1000 * tickRate() * state.speed;
+    const playbackRate = playbackRateAtTick(state.bundle, state.tickFloat, state.speed, state.fastFreezeTime);
+    const next = state.tickFloat + elapsed / 1000 * tickRate() * playbackRate;
     if (next >= totalTicks()) { setTick(totalTicks(), { persist: true }); setPlaying(false); } else setTick(next, { persist: false });
   }
   renderCanvas(); state.frameId = requestAnimationFrame(animationFrame);
